@@ -31,7 +31,8 @@ model.
     -   Points (PTS)  
     -   Salary Group (target variable)
 
-**Salary Groups:** - **Budget Tier:** Bottom 25%  
+**Salary Groups:** 
+- **Budget Tier:** Bottom 25%  
 - **Mid-Tier:** 25%–50%  
 - **Upper Mid-Tier:** 50%–75%  
 - **Premium Tier:** Top 25%
