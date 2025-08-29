@@ -1,0 +1,288 @@
+---
+title: "STAT-627 Final Project-NBA"
+author: "Te-Jou(Carol) Hou, Sean Hsu, Chih-Chen Wang (Gilbert), Fang-Yi Wu(Eva)"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, message=FALSE,warning=FALSE}
+library(MASS) 
+library(caret)
+library(dplyr)
+library(nnet)
+library(class)
+library(tree)
+library(e1071)  
+library(tidyverse)
+```
+
+# I. Importing and Organizing Data
+```{r, message=FALSE,warning=FALSE}
+
+# Read the dataset into NBA_df
+path <- file.path(
+  "/Users/houderou/Library/Mobile Documents/com~apple~CloudDocs",
+  "AMU documents /MS in DS 1/STAT-627-002_Statistical Machine Learning",
+  "Final project/nba_salaries_all.csv"
+)
+NBA_df <- read.csv(path)
+
+# Calculate the quartiles (25th, 50th, 75th percentiles) of the Salary column
+Q1 <- quantile(NBA_df$Salary, 0.25)
+Q2 <- quantile(NBA_df$Salary, 0.5)
+Q3 <- quantile(NBA_df$Salary, 0.75)
+
+# Process the NBA_df dataset  
+NBA_df |>
+  select(Salary, AST,  STL,  BLK , TOV, PF, PTS) |>
+  rename(
+    Assists = AST,
+    Steals = STL,
+    Blocks = BLK,
+    Turnovers = TOV,
+    Personal_Fouls = PF,
+    Points = PTS
+  ) |>
+  mutate(Salary_Group = case_when(
+    Salary <= Q1 ~ "Budget Tier",
+    Salary > Q1 & Salary <= Q2 ~ "Mid-Tier",
+    Salary > Q2 & Salary <= Q3 ~ "Upper Mid-Tier",
+    Salary > Q3 ~ "Premium Tier")
+  ) |> 
+  mutate(Salary_Group = as.factor(Salary_Group)) |>
+  select(-Salary)-> NBA_df
+```
+
+# II. Model Building and Evaluation
+
+## 1. Logistic Regression
+```{r, message=FALSE,warning=FALSE}
+set.seed(123)
+
+train_index <- createDataPartition(NBA_df$Salary_Group, p = 0.7, list = FALSE)
+train_data <- NBA_df[train_index, ]
+test_data <- NBA_df[-train_index, ]
+
+train_control <- trainControl(method = "cv", number = 10)
+
+logistic_cv_model <- train(
+  Salary_Group ~Assists + Steals + Blocks + Turnovers + Personal_Fouls + Points,
+  data = train_data,
+  method = "multinom",
+  trControl = train_control,
+  trace = FALSE )
+
+test_predictions <- predict(logistic_cv_model, newdata = test_data)
+conf_matrix <- confusionMatrix(test_predictions, test_data$Salary_Group)
+conf_matrix$overall["Accuracy"]
+category_accuracies <- conf_matrix$byClass[, "Balanced Accuracy"]
+category_accuracies
+
+```
+
+## 2. LDA and QDA
+```{r}
+#LDA
+set.seed(123)
+train_index <- createDataPartition(NBA_df$Salary_Group, p = 0.7, list = FALSE)
+train_2 <- NBA_df[train_index, ]
+test_2<- NBA_df[-train_index, ]
+
+lda_model <- lda(Salary_Group ~ ., data = train_2)
+lda_predictions <- predict(lda_model, test_2)
+
+conf_matrix_lda <- confusionMatrix(lda_predictions$class, test_2$Salary_Group)
+
+overall_accuracy <- conf_matrix_lda$overall["Accuracy"]
+overall_accuracy
+balanced_accuracy <- conf_matrix_lda$byClass[, "Balanced Accuracy"]
+balanced_accuracy
+```
+
+```{r}
+head(lda_predictions$posterior,n=3)
+```
+
+```{r}
+lda_coords <- predict(lda_model, train_2)$x
+
+custom_colors <- c("Budget Tier" = "red", 
+                   "Mid-Tier" = "blue", 
+                   "Premium Tier" = "green", 
+                   "Upper Mid-Tier" = "orange")
+
+pairs(lda_coords, 
+      col = custom_colors[train_2$Salary_Group], 
+      pch = 16, 
+      main = "Matrix Plot of LD1, LD2, and LD3")
+```
+
+```{r}
+#QDA
+qda_model <- qda(Salary_Group ~ ., data = train_2)
+qda_predictions <- predict(qda_model, test_2)
+
+conf_matrix_qda <- confusionMatrix(qda_predictions$class, test_2$Salary_Group)
+overall_accuracy <- conf_matrix_qda$overall['Accuracy']
+overall_accuracy
+balanced_accuracy <- rowMeans(conf_matrix_qda$byClass[, c('Sensitivity', 
+                                                          'Specificity')], 
+                              na.rm = TRUE)
+balanced_accuracy
+```
+
+```{r}
+head(qda_predictions$posterior,n=3)
+```
+
+Comparison Between LDA and QDA:
+```{r}
+# CV Accuracy:
+lda_cv <- lda(Salary_Group ~ ., data = train_2, CV = TRUE)
+lda_cv_accuracy <- mean(lda_cv$class == train_2$Salary_Group)
+cat("LDA CV Accuracy:", lda_cv_accuracy, "\n")
+
+qda_cv <- qda(Salary_Group ~ ., data = train_2, CV = TRUE)
+qda_cv_accuracy <- mean(qda_cv$class == train_2$Salary_Group)
+cat("QDA CV Accuracy:", qda_cv_accuracy, "\n")
+```
+
+## 3. KNN
+```{r, message=FALSE,warning=FALSE}
+#Knn
+set.seed(123)
+
+train_index <- createDataPartition(NBA_df$Salary_Group, p = 0.7, list = FALSE)
+train_3 <- NBA_df[train_index, ]
+test_3 <- NBA_df[-train_index, ]
+
+train_control <- trainControl(method = "cv", number = 10)
+
+knn_cv_model <- train(
+  Salary_Group ~Assists + Steals + Blocks + Turnovers + Personal_Fouls + Points,
+  data = train_3,
+  method = "knn",
+  trControl = train_control,
+  tuneGrid = data.frame(k = 1:20)
+)
+
+optimal_k <- knn_cv_model$bestTune$k
+optimal_k
+test_predictions <- knn(
+  train = train_3[, c("Assists", "Steals", "Blocks", 
+                      "Turnovers", "Personal_Fouls", "Points")],
+  test = test_3[, c("Assists", "Steals", "Blocks", 
+                    "Turnovers", "Personal_Fouls", "Points")],
+  cl = train_3$Salary_Group,
+  k = optimal_k
+)
+test_accuracy <- mean(test_predictions == test_3$Salary_Group)
+
+conf_matrix <- confusionMatrix(
+  factor(test_predictions, levels = levels(test_3$Salary_Group)),
+  test_3$Salary_Group)
+
+class_stats <- conf_matrix$byClass
+
+overall_accuracy <- conf_matrix$overall['Accuracy']
+overall_accuracy
+balanced_accuracy <- rowMeans(class_stats[, c('Sensitivity', 'Specificity')], 
+                              na.rm = TRUE)
+balanced_accuracy
+```
+
+## 4. Decision Trees
+```{r,warning=FALSE}
+# Build a decision tree model
+set.seed(123)
+TREE = tree(Salary_Group ~ ., data = NBA_df)
+
+# Apply cross-validation techniques to find the optimal tuning parameters
+set.seed(123)
+CV.TREE = cv.tree(TREE, FUN = prune.misclass)
+#CV.TREE
+plot(CV.TREE)
+```
+
+
+```{r}
+# The best decision tree model
+TREE.BEST = prune.tree(TREE, best = 6)
+
+plot(TREE.BEST, type="uniform")
+text(TREE.BEST)
+
+TREE.BEST
+summary(TREE.BEST)
+```
+
+## 5. SVM
+
+```{r}
+# Split data into training and testing sets
+set.seed(123)
+train_indices <- sample(1:nrow(NBA_df), size = 0.7 * nrow(NBA_df))
+train_data <- NBA_df[train_indices, ]
+test_data <- NBA_df[-train_indices, ]
+
+# Build the SVM model
+svm_model <- svm(Salary_Group ~ ., data = train_data, kernel = "radial", 
+                 cost = 1)
+
+# Model evaluation
+predicted <- predict(svm_model, test_data)
+conf_matrix <- table(Predicted = predicted, Actual = test_data$Salary_Group)
+#print(conf_matrix)
+
+# Calculate accuracy
+accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+print(paste("Accuracy:", round(accuracy, 2)))
+
+```
+
+
+```{r}
+# Define the kernels to evaluate
+kernels <- c("linear", "polynomial", "radial", "sigmoid")
+
+# Initialize a list to store tuning results for each kernel
+results <- list()
+
+# Loop through each kernel and perform tuning
+for (kernel_type in kernels) {
+  set.seed(123)
+  tuned_svm <- tune(
+    svm,
+    Salary_Group ~ .,
+    data = train_data,
+    kernel = kernel_type,
+    ranges = list(cost = c(0.1, 1, 10, 100), gamma = c(0.01, 0.1, 1))
+  )
+  
+  # Store the result for the current kernel
+  results[[kernel_type]] <- tuned_svm
+}
+
+# Extract the best model across all kernels
+best_result <- NULL
+best_performance <- Inf
+
+for (kernel_type in kernels) {
+  if (results[[kernel_type]]$best.performance < best_performance) {
+    best_performance <- results[[kernel_type]]$best.performance
+    best_result <- results[[kernel_type]]
+  }
+}
+
+# Print the best model and its parameters
+print(best_result$best.model)
+
+# Summary of the best tuning result
+#summary(best_result)
+# Calculate best accuracy
+best_accuracy <- 1 - best_result$best.performance
+print(paste("Best Accuracy:", round(best_accuracy, 4)))
+
+```
