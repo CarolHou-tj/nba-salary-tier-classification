@@ -114,8 +114,8 @@ overfitting.</td>
 ## 👤 Author
 
 -   **Te-Jou Hou** —
-    [LinkedIn](%7B%7Bwww.linkedin.com/in/te-jou-hou%7D%7D) ·
-    [Email](mailto:%7B%7Bth5955a@american.edu%7D%7D)
+    [LinkedIn](www.linkedin.com/in/te-jou-hou) ·
+    [Email](mailto:th5955a@american.edu)
 
 -   **Sean Hsu**
 
