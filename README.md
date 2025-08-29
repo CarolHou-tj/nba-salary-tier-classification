@@ -20,7 +20,7 @@ model.
 ## 📊 Dataset
 
 -   **Source:** [Kaggle NBA Player Salaries 2022-23
-    Season](https://www.kaggle.com/)  
+    Season](https://www.kaggle.com/datasets/jamiewelsh2/nba-player-salaries-2022-23-season?select=nba_salaries.csv)  
 -   **Entries:** 467 players  
 -   **Selected Features:**
     -   Assists (AST)  
